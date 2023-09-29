@@ -1,28 +1,71 @@
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const jwt = require('../jwt');
+const bcrypt = require('bcrypt');
 
 module.exports = {
 
-    async createUser(req, res) {
-        const { nome, email } = req.body;
+    async registerUser(req, res) {
+        const { nome, email, senha } = req.body;
+    
         try {
+          
             const userExist = await prisma.user.findFirst({
-                where: {
-                    email,
-                },
-            }); 
-            
-            if (userExist) {
-                    return res.json("This user already exists!");
-                } else {
-                    const user = await prisma.user.create({
-                        data: {                           
-                            email,
-                            nome,
-                        },
-                    });
-                    res.json({ Mensagem: "User created successfully!" });
-                }
+            where: {
+                email,
+            },
+        });
+    
+        if (userExist) {
+            return res.status(400).json({ error: "Email already in use" });
+        }
+    
+          
+        const hashedSenha = await bcrypt.hash(senha, 10); // O segundo argumento é o custo do hash
+    
+          
+        const user = await prisma.user.create({
+            data: {
+                email,
+                nome,
+                senha: hashedSenha, 
+            },
+        });
+    
+          
+        const token = jwt.createToken({ userId: user.id });
+    
+            res.json({ Mensagem: "User registered successfully!", token });
+        } catch (error) {
+          res.json({ error });
+        }
+    },
+
+    async login(req, res) {
+        const { email, senha } = req.body;
+    
+        try {
+        const user = await prisma.user.findFirst({
+            where: {
+                email,
+            },
+        });
+    
+        if (!user) {
+            return res.status(401).json({ error: "Login failed" });
+        }
+    
+          
+        const senhaMatch = await bcrypt.compare(senha, user.senha);
+    
+        if (!senhaMatch) {
+            return res.status(401).json({ error: "Login failed" });
+        }
+    
+          
+        const token = jwt.createToken({ userId: user.id });
+    
+            res.json({ Mensagem: "Login successful!", token });
         } catch (error) {
             res.json({ error });
         }
